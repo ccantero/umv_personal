@@ -10,7 +10,7 @@
 
 int main(int argc, char *argv[])
 {
-	logger = log_create("Log.txt", "UMV",false, LOG_LEVEL_INFO);
+	logger = log_create("Log.txt", "UMV", false, LOG_LEVEL_INFO);
 	GetInfoConfFile();
 	pthread_t th1;
 	pthread_t conexiones[MAXCONEXIONES];
@@ -79,7 +79,14 @@ void conexion_nueva(void *param)
 	tipo_conexion = msg.tipo;
 	msg.tipo = UMV;
 	send(conexion, &msg, sizeof(t_msg_handshake), 0);
-	log_info(logger, "Se envio handshake a conexion nueva.");
+	if (tipo_conexion == CPU)
+	{
+		log_info(logger, "Se conecto una cpu.");
+	}
+	if (tipo_conexion == KERNEL)
+	{
+		log_info(logger, "Se conecto el kernel.");
+	}
 	// Bucle principal
 	while(1)
 	{
@@ -97,135 +104,261 @@ void conexion_nueva(void *param)
 
 void atender_cpu(int sock)
 {
-	char buffer[128];
-	char aux[128];
-	memset(buffer, '\0', 128);
-	recv(sock, aux, sizeof(aux), 0);
-	memcpy(buffer, aux, 128);
-	int tamanio;
-	tamanio = strlen(buffer);
+	t_mensaje mensaje;
+	recv(sock, &mensaje, sizeof(t_mensaje), 0);
 	t_msg_cambio_proceso_activo msg;
 	t_msg_solicitud_bytes msg2;
 	t_msg_envio_bytes msg3;
-	switch(tamanio)
+	int respuesta;
+	switch(mensaje.tipo)
 	{
-	case (sizeof(t_msg_cambio_proceso_activo)):
-		// Recibí un tipo de mensaje cambio de proceso activo
-		memcpy(&msg, buffer, sizeof(t_msg_cambio_proceso_activo));
-		// Comportamiento para cambiar proceso activo
+	case SOLICITUDBYTES:
+		pthread_mutex_lock(&semProcesoActivo);
+		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
 		proceso_activo = msg.id_programa;
+		recv(sock, &msg2, sizeof(t_msg_solicitud_bytes), 0);
+		respuesta = atender_solicitud_bytes(msg2.base, msg2.offset, msg2.tamanio, sock, NULL);
+		if (respuesta != 0)
+		{
+			mensaje.tipo = respuesta;
+			mensaje.id_proceso = proceso_activo;
+			send(sock, &mensaje, sizeof(t_mensaje), 0);
+		}
+		pthread_mutex_unlock(&semProcesoActivo);
 		break;
-	case (sizeof(t_msg_solicitud_bytes)):
-		// Recibí un tipo de mensaje solicitud de bytes
-		memcpy(&msg2, buffer, sizeof(t_msg_solicitud_bytes));
-		// TODO Comportamiento cuando se recibe una solicitud de bytes
-
-		break;
-	case (sizeof(t_msg_envio_bytes) + 1):
-		// Recibí un tipo de mensaje envío de bytes
-		memcpy(&msg3, buffer, sizeof(t_msg_envio_bytes));
-		// TODO Comportamiento cuando se recibe un envio de bytes de un cpu
-
+	case ENVIOBYTES:
+		pthread_mutex_lock(&semProcesoActivo);
+		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
+		proceso_activo = msg.id_programa;
+		recv(sock, &msg3, sizeof(t_msg_envio_bytes), 0);
+		respuesta = atender_envio_bytes(msg3.base, msg3.offset, msg3.tamanio, sock);
+		if (respuesta != 0)
+		{
+			mensaje.tipo = respuesta;
+			mensaje.id_proceso = proceso_activo;
+			send(sock, &mensaje, sizeof(t_mensaje), 0);
+		}
+		pthread_mutex_unlock(&semProcesoActivo);
 		break;
 	}
 }
 
+int atender_envio_bytes(int base, int offset, int tam, int sock)
+{
+	char buffer[tam];
+	if (sock != 0)
+	{
+		recv(sock, &buffer, sizeof(buffer), 0);
+	}
+	else
+	{
+		getstr(buffer);
+	}
+	int i;
+	t_info_programa *prog;
+	t_info_segmento *seg;
+	int encontre_programa = 0;
+	int encontre_segmento = 0;
+	t_mensaje msg;
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		if (prog->programa == proceso_activo)
+		{
+			encontre_programa = 1;
+			break;
+		}
+	}
+	if (encontre_programa == 1)
+	{
+		for (i = 0; i < list_size(prog->segmentos); i++)
+		{
+			seg = list_get(prog->segmentos, i);
+			if (seg->dirLogica == base)
+			{
+				encontre_segmento = 1;
+				break;
+			}
+		}
+		if (encontre_segmento == 1)
+		{
+			if (offset > seg->tamanio && ((seg->tamanio - offset) >= tam))
+			{
+				// Devuelvo segmentation fault
+				return SEGMENTATION_FAULT;
+			}
+			else
+			{
+				// La posicion de memoria es válida
+				memcpy((void *)memoria[seg->dirFisica + offset], buffer, tam);
+			}
+		}
+		else
+		{
+			return SEGMENTO_INVALIDO;
+		}
+	}
+	else
+	{
+		return PROGRAMA_INVALIDO;
+	}
+	if (sock != 0)
+	{
+		msg.tipo = ENVIOBYTES;
+		send(sock, &msg, sizeof(t_mensaje), 0);
+	}
+	return 0;
+}
+
+int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buffer)
+{
+	t_mensaje msg;
+	char buf[tam];
+	int i;
+	t_info_programa *prog;
+	t_info_segmento *seg;
+	int encontre_programa = 0;
+	int encontre_segmento = 0;
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		if (prog->programa == proceso_activo)
+		{
+			encontre_programa = 1;
+			break;
+		}
+	}
+	if (encontre_programa == 1)
+	{
+		for (i = 0; i < list_size(prog->segmentos); i++)
+		{
+			seg = list_get(prog->segmentos, i);
+			if (seg->dirLogica == base)
+			{
+				encontre_segmento = 1;
+				break;
+			}
+		}
+		if (encontre_segmento == 1)
+		{
+			if (offset > seg->tamanio && ((seg->tamanio - offset) >= tam))
+			{
+				// Devuelvo segmentation fault
+				return SEGMENTATION_FAULT;
+			}
+			else
+			{
+				// La posicion de memoria es válida
+				memcpy(buf, (char *)memoria[seg->dirFisica + offset], sizeof(buf));
+			}
+		}
+		else
+		{
+			return SEGMENTO_INVALIDO;
+		}
+	}
+	else
+	{
+		return PROGRAMA_INVALIDO;
+	}
+	if (sock != 0)
+	{
+		msg.tipo = ENVIOBYTES;
+		send(sock, &msg, sizeof(t_mensaje), 0);
+		send(sock, &buf, sizeof(buf), 0);
+	}
+	else
+	{
+		*buffer = (char *)malloc(tam + 1);
+		memcpy(*buffer, (char *)memoria[seg->dirFisica + offset], tam);
+		return (seg->dirFisica + offset);
+	}
+	return 0;
+}
+
 void atender_kernel(int sock)
 {
-	log_info(logger, "Se conecto el kernel.");
 	t_mensaje mensaje;
 	recv(sock, &mensaje, sizeof(t_mensaje), 0);
-	/*
-	char buffer[128];
-	char aux[128];
-	memset(buffer, '\0', 128);
-	recv(sock, aux, sizeof(aux), 0);
-	memcpy(buffer, aux, 128);
-	int tamanio;
-	tamanio = strlen(buffer);
-	*/
 	t_msg_destruir_segmentos msg;
 	t_msg_crear_segmento msg2;
 	t_msg_envio_bytes msg3;
-	t_msg_cambio_proceso_activo msg4;
-	t_info_programa *programa_nuevo;
-	t_info_segmento *segmento_nuevo;
-	t_info_programa *prog_aux;
-	t_info_segmento *seg_aux;
-	int tamanio_lista = list_size(list_programas);
-	int i;
-	int indice;
+	int respuesta;
 	switch(mensaje.tipo)
 	{
 	case DESTRUIRSEGMENTOS:
 		pthread_mutex_lock(&semCompactacion);
 		recv(sock, &msg, sizeof(t_msg_destruir_segmentos), 0);
-		// Busco al programa en mi lista de programas
-		for (i = 0; i < tamanio_lista; i++)
-		{
-			prog_aux = list_get(list_programas, i);
-			if (prog_aux->programa == msg.id_programa)
-			{
-				indice = i;
-				break;
-			}
-		}
-		for (i = list_size(prog_aux->segmentos) - 1; i >= 0; i--)
-		{
-			list_remove(prog_aux->segmentos, i);
-		}
-		list_destroy(prog_aux->segmentos);
-		list_remove(list_programas, indice);
+		mensaje.datosNumericos = destruir_segmentos(msg.id_programa);
 		pthread_mutex_unlock(&semCompactacion);
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
 		break;
 	case CREARSEGMENTO:
 		pthread_mutex_lock(&semCompactacion);
 		recv(sock, &msg2, sizeof(t_msg_crear_segmento), 0);
-		if (tamanio_lista != 0)
-		{
-			// Busco al programa en mi lista de programas
-			for (i = 0; i < tamanio_lista; i++)
-			{
-				prog_aux = list_get(list_programas, i);
-				if (prog_aux->programa == msg2.id_programa)
-				{
-					break;
-				}
-			}
-			seg_aux = (t_info_segmento *)malloc(sizeof(t_info_segmento));
-			seg_aux->id = msg2.id_programa;
-			seg_aux->tamanio = msg2.tamanio;
-			seg_aux->dirFisica = asignar_direccion_en_memoria();
-			seg_aux->dirLogica = asignar_direccion_logica();
-			list_add(prog_aux->segmentos, seg_aux);
-		}
-		else
-		{
-			programa_nuevo = (t_info_programa *)malloc(sizeof(t_info_programa));
-			programa_nuevo->programa = msg2.id_programa;
-			programa_nuevo->segmentos = list_create();
-			segmento_nuevo = (t_info_segmento *)malloc(sizeof(t_info_segmento));
-			segmento_nuevo->id = msg2.id_programa;
-			segmento_nuevo->tamanio = msg2.tamanio;
-			segmento_nuevo->dirFisica = asignar_direccion_en_memoria();
-			segmento_nuevo->dirLogica = asignar_direccion_logica();
-			list_add(programa_nuevo->segmentos, segmento_nuevo);
-			list_add(list_programas, programa_nuevo);
-		}
+		mensaje.datosNumericos = crear_segmento(msg2.id_programa, msg2.tamanio);
 		pthread_mutex_unlock(&semCompactacion);
-		// TODO verificar espacio en memoria y responder al kernel con la direccion logica
-		// si no hay espacio devuelvo -1
+		mensaje.id_proceso = UMV;
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
 		break;
 	case ENVIOBYTES:
-		recv(sock, &msg4, sizeof(t_msg_cambio_proceso_activo), 0);
-		proceso_activo = msg4.id_programa;
+		pthread_mutex_lock(&semProcesoActivo);
+		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
+		proceso_activo = msg.id_programa;
 		recv(sock, &msg3, sizeof(t_msg_envio_bytes), 0);
-		// TODO Comportamiento cuando se reciben bytes del kernel
-		send(sock, &mensaje, sizeof(t_mensaje), 0);
+		respuesta = atender_envio_bytes(msg3.base, msg3.offset, msg3.tamanio, sock);
+		if (respuesta != 0)
+		{
+			mensaje.tipo = respuesta;
+			mensaje.id_proceso = proceso_activo;
+			send(sock, &mensaje, sizeof(t_mensaje), 0);
+		}
+		pthread_mutex_unlock(&semProcesoActivo);
 		break;
 	}
+}
+
+int hay_espacio_en_memoria(int tam)
+{
+	int mem[space];
+	int i;
+	int j;
+	int k;
+	t_info_programa *prog;
+	t_info_segmento *seg;
+	int espacio_libre = 0;
+	for (i = 0; i < space; i++)
+	{
+		mem[i] = 0;
+	}
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		for (j = 0; j < list_size(prog->segmentos); j++)
+		{
+			seg = list_get(prog->segmentos, j);
+			for (k = 0; k < seg->tamanio; k++)
+			{
+				mem[k + seg->dirFisica] = 1;
+			}
+		}
+	}
+	for (i = 0; i < space; i++)
+	{
+		if (mem[i] == 0)
+		{
+			espacio_libre++;
+			if (espacio_libre == tam)
+			{
+				return 1;
+			}
+		}
+		else
+		{
+			espacio_libre = 0;
+		}
+	}
+	return 0;
 }
 
 int asignar_direccion_logica()
@@ -261,68 +394,429 @@ int asignar_direccion_en_memoria()
 
 void consola (void* param)
 {
+	initscr();
+	echo();
+	scrollok(stdscr, TRUE);
 	char comando[100];
-	char *c;
+	char comando2[100];
 	int flag_comandoOK;
+	int flag_comandoOK2;
 	int nuevo_valor;
+	int valor_numerico;
+	int valor_numerico2;
+	int valor_numerico3;
+	int proc_id = -1;
+	int respuesta;
+	int dir_fisica;
+	char *buffer;
 	log_info(logger, "Se lanzo el hilo de consola");
+	printw("-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n");
+	printw("         Bienvenido a la consola de UMV           \n");
+	printw("-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n");
+	refresh();
 	// Bucle principal esperando peticiones del usuario
 	for(;;)
 	{
 		flag_comandoOK = 0;
-    	printf("-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n");
-    	printf("         Bienvenido a la consola de UMV           \n");
-    	printf("-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-\n");
-    	printf("Ingrese el comando: \n");
-    	printf(">");
-    	scanf("%s",comando);
-    	c = strtok(comando,"\n");
-   		if (flag_comandoOK == 0 && strncmp(c,"operacion",strlen("operacion"))==0 )
+		flag_comandoOK2 = 0;
+		fflush(stdin);
+    	printw("Ingrese el comando: \n");
+    	printw(">");
+    	refresh();
+    	getstr(comando);
+   		if (flag_comandoOK == 0 && strcmp(comando, "operacion") == 0)
    		{
-   			printf("Llamar a funcion operacion\n");
+   			printw("Operaciones disponibles: \n");
+   			printw("\tcrear segmento\n");
+   			printw("\tsolicitar memoria\n");
+   			printw("\tescribir memoria\n");
+   			printw("\tdestruir segmentos\n");
+   			printw("Ingrese la operacion: \n");
+   			printw(">");
+   			refresh();
+   			getstr(comando2);
+   			if (flag_comandoOK2 == 0 && strcmp(comando2, "crear segmento") == 0)
+   			{
+   				printw("Ingrese proceso: \n");
+   				printw(">");
+   				refresh();
+   				scanw("%d", &proc_id);
+   				respuesta = verificar_proc_id(proc_id);
+   				if (respuesta == 0)
+   				{
+   					printw("El proceso ingresado no existe en memoria.\n");
+   					printw("Ingrese un proceso que exista en memoria para crear un segmento.\n");
+   					refresh();
+   				}
+   				else
+   				{
+   					printw("Ingrese tamanio del segmento: \n");
+   					printw(">");
+   					refresh();
+   					scanw("%d", &valor_numerico);
+   					pthread_mutex_lock(&semCompactacion);
+   					respuesta = crear_segmento(proc_id, valor_numerico);
+   					pthread_mutex_unlock(&semCompactacion);
+   					switch(respuesta)
+   					{
+   					case -1:
+   						printw("No hay memoria disponible para ese tamanio de segmento.\n");
+   						printw("El segmento no fue creado.\n");
+   						refresh();
+   						break;
+   					default:
+   						log_info(logger, "Segmento de proceso %d creado.", proc_id);
+   						printw("El segmento fue creado.\n");
+   						dir_fisica = transformar_direccion_en_fisica(respuesta, proc_id);
+   						printw("Posicion en memoria del segmento: %d\n", dir_fisica);
+   						refresh();
+   						break;
+   					}
+   				}
+   				flag_comandoOK2 = 1;
+   			}
+   			if (flag_comandoOK2 == 0 && strcmp(comando2, "solicitar memoria") == 0)
+   			{
+   				printw("Ingrese proceso: \n");
+   				printw(">");
+   				refresh();
+   				scanw("%d", &proc_id);
+   				respuesta = verificar_proc_id(proc_id);
+   				if (respuesta == 0)
+   				{
+   					printw("El proceso ingresado no existe en memoria.\n");
+   					printw("Ingrese un proceso que exista en memoria.\n");
+   					refresh();
+   				}
+   				else
+   				{
+   					printw("Ingrese base: \n");
+   					printw(">");
+   					refresh();
+   					scanw("%d", &valor_numerico);
+   					printw("Ingrese offset: \n");
+   					printw(">");
+   					refresh();
+   					scanw("%d", &valor_numerico2);
+   					printw("Ingrese cantidad de bytes a leer: \n");
+   					printw(">");
+   					refresh();
+   					scanw("%d", &valor_numerico3);
+   					respuesta = atender_solicitud_bytes(valor_numerico, valor_numerico2, valor_numerico3, 0, &buffer);
+   					switch(respuesta)
+   					{
+   					case PROGRAMA_INVALIDO:
+   						printw("El proceso es invalido.\n");
+   						refresh();
+   						break;
+   					case SEGMENTO_INVALIDO:
+   						printw("El segmento es invalido.\n");
+   						refresh();
+   						break;
+   					case SEGMENTATION_FAULT:
+   						printw("Segmentation fault.\n");
+   						refresh();
+   						break;
+   					default:
+   						printw("Posicion de memoria solicitada: %d\n", respuesta);
+   						printw("Contenido: %s\n", buffer);
+   						refresh();
+   						free(buffer);
+   						break;
+   					}
+   				}
+   				flag_comandoOK2 = 1;
+   			}
+   			if (flag_comandoOK2 == 0 && strcmp(comando2, "escribir memoria") == 0)
+   			{
+   				printw("Ingrese proceso: \n");
+   				printw(">");
+   				refresh();
+   				scanw("%d", &proc_id);
+   				respuesta = verificar_proc_id(proc_id);
+   				if (respuesta == 0)
+   				{
+   					printw("El proceso ingresado no existe en memoria.\n");
+   					printw("Ingrese un proceso que exista en memoria.\n");
+   					refresh();
+   				}
+   				else
+   				{
+   					printw("Ingrese base: \n");
+   					printw(">");
+   					refresh();
+   					scanw("%d", &valor_numerico);
+   					printw("Ingrese offset: \n");
+   					printw(">");
+   					refresh();
+   					scanw("%d", &valor_numerico2);
+   					printw("Ingrese cantidad de bytes a escribir: \n");
+   					printw(">");
+   					refresh();
+   					scanw("%d", &valor_numerico3);
+   					respuesta = atender_envio_bytes(valor_numerico, valor_numerico2, valor_numerico3, 0);
+   					switch(respuesta)
+   					{
+   					case 0:
+   						printw("Se escribio la memoria satisfactoriamente.\n");
+   						refresh();
+   						break;
+   					case PROGRAMA_INVALIDO:
+   						printw("El proceso es invalido.\n");
+   						refresh();
+   						break;
+   					case SEGMENTO_INVALIDO:
+   						printw("El segmento es invalido.\n");
+   						refresh();
+   						break;
+   					case SEGMENTATION_FAULT:
+   						printw("Segmentation fault.\n");
+   						refresh();
+   						break;
+   					}
+   				}
+   				flag_comandoOK2 = 1;
+   			}
+   			if (flag_comandoOK2 == 0 && strcmp(comando2, "destruir segmentos") == 0)
+   			{
+   				printw("Ingrese proceso: \n");
+   				printw(">");
+   				refresh();
+   				scanw("%d", &proc_id);
+   				pthread_mutex_lock(&semCompactacion);
+   				respuesta = destruir_segmentos(proc_id);
+   				pthread_mutex_unlock(&semCompactacion);
+   				if (respuesta == 1)
+   				{
+   					log_info(logger, "Segmentos de proceso %d destruidos satisfactoriamente.", proc_id);
+   					printw("Los segmentos del programa fueron destruidos satisfactoriamente.\n");
+   					refresh();
+   				}
+   				else
+   				{
+   					printw("El programa ingresado no es valido.\n");
+   					refresh();
+   				}
+   				flag_comandoOK2 = 1;
+   			}
    			flag_comandoOK = 1;
    		}
-   		if (flag_comandoOK == 0 && strncmp(c,"retardo",strlen("retardo"))==0)
+   		if (flag_comandoOK == 0 && strcmp(comando, "retardo") == 0)
    		{
    			log_info(logger, "Se cambio el valor de retardo por consola.");
-   			printf("Nuevo valor de retardo: ");
-   			scanf("%d", &nuevo_valor);
-   			printf("Valor anterior de retardo: %d\n", retardo);
+   			printw("Nuevo valor de retardo: ");
+   			refresh();
+   			scanw("%d", &nuevo_valor);
+   			printw("Valor anterior de retardo: %d\n", retardo);
    			cambiar_retardo(nuevo_valor);
-   			printf("Valor actual de retardo: %d\n", retardo);
+   			printw("Valor actual de retardo: %d\n", retardo);
+   			refresh();
    			flag_comandoOK = 1;
    		}
-   		if (flag_comandoOK == 0 && strncmp(c,"algoritmo",strlen("algoritmo"))==0)
+   		if (flag_comandoOK == 0 && strcmp(comando, "algoritmo") == 0)
    		{
    			log_info(logger, "Se cambio el algoritmo por consola.");
-   			printf("Se cambio el algoritmo.\n");
-   			printf("Algoritmo anterior: %s\n", algoritmo);
+   			printw("Se cambio el algoritmo.\n");
+   			printw("Algoritmo anterior: %s\n", algoritmo);
    			cambiar_algoritmo();
-   			printf("Algoritmo actual: %s\n", algoritmo);
+   			printw("Algoritmo actual: %s\n", algoritmo);
+   			refresh();
    		   	flag_comandoOK = 1;
    		}
-   		if (flag_comandoOK == 0 && strncmp(c,"compactacion",strlen("compactacion"))==0)
+   		if (flag_comandoOK == 0 && strcmp(comando, "compactacion") == 0)
    		{
    			log_info(logger, "Se pidio compactar memoria por consola.");
    			compactar_memoria();
    		   	flag_comandoOK = 1;
    		}
-   		if (flag_comandoOK == 0 && strncmp(c,"dump",strlen("dump"))==0)
+   		if (flag_comandoOK == 0 && strcmp(comando, "dump") == 0)
    		{
-   			printf("Llamar a funcion dump\n");
+   			pthread_mutex_lock(&semCompactacion);
+   			dump_memoria();
+   			pthread_mutex_unlock(&semCompactacion);
    		   	flag_comandoOK = 1;
+   		}
+   		if (flag_comandoOK == 0 && strcmp(comando, "help") == 0)
+   		{
+   			printw("Los unicos comandos habilitados son: \n");
+   			printw("\toperacion\n");
+   			printw("\tretardo\n");
+   			printw("\talgoritmo\n");
+   			printw("\tcompactacion\n");
+   			printw("\tdump\n");
+   			refresh();
+   			flag_comandoOK = 1;
    		}
    		if(flag_comandoOK == 0)
    		{
-   			printf("Por favor verifique la sintaxis de los comandos utilizados\n");
-   			printf("Los unicos comandos habilitados son: \n");
-   			printf("\toperacion\n");
-   			printf("\tretardo\n");
-   			printf("\talgoritmo\n");
-   			printf("\tcompactacion\n");
-   			printf("\tdump\n");
+   			printw("Por favor verifique la sintaxis de los comandos utilizados.\n");
+   			printw("Los unicos comandos habilitados son: \n");
+   			printw("\toperacion\n");
+   			printw("\tretardo\n");
+   			printw("\talgoritmo\n");
+   			printw("\tcompactacion\n");
+   			printw("\tdump\n");
+   			refresh();
    		}
    	}
+}
+
+void dump_memoria()
+{
+	int mem_utilizada = 0;
+	clear();
+	refresh();
+	int x = 0;
+	int y = 0;
+	move(y, x);
+	printw("Id Proceso\n");
+	x += 15;
+	move(y, x);
+	printw("Dir. Fisica Segmento\n");
+	x += 25;
+	move(y, x);
+	printw("Tamanio Segmento\n");
+	refresh();
+	t_info_programa *prog;
+	t_info_segmento *seg;
+	int i;
+	int j;
+	x = 0;
+	y = 1;
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		for (j = 0; j < list_size(prog->segmentos); j++)
+		{
+			seg = list_get(prog->segmentos, j);
+			move(y, x);
+			printw("%d", seg->id);
+			x += 15;
+			move(y, x);
+			printw("%d", seg->dirFisica);
+			x += 25;
+			move(y, x);
+			printw("%d", seg->tamanio);
+			y++;
+			x = 0;
+			refresh();
+			mem_utilizada += seg->tamanio;
+		}
+	}
+	y++;
+	move(y, x);
+	printw("Memoria total: %d\n", space);
+	printw("Memoria utilizada: %d\n", mem_utilizada);
+	refresh();
+}
+
+int verificar_proc_id(int pid)
+{
+	int i;
+	t_info_programa *prog;
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		if (prog->programa == pid)
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int transformar_direccion_en_fisica(int direccion, int pid)
+{
+
+	return 0;
+}
+
+int transformar_direccion_en_logica(int direccion, int pid)
+{
+
+	return 0;
+}
+
+int crear_segmento(int idproc, int tamanio)
+{
+	int tamanio_lista = list_size(list_programas);
+	t_info_programa *prog;
+	t_info_segmento *seg;
+	int i;
+	if (tamanio_lista != 0)
+	{
+		// Busco al programa en mi lista de programas
+		for (i = 0; i < tamanio_lista; i++)
+		{
+			prog = list_get(list_programas, i);
+			if (prog->programa == idproc)
+			{
+				break;
+			}
+		}
+		seg = (t_info_segmento *)malloc(sizeof(t_info_segmento));
+		seg->id = idproc;
+		seg->tamanio = tamanio;
+		seg->dirFisica = asignar_direccion_en_memoria();
+		seg->dirLogica = asignar_direccion_logica();
+		list_add(prog->segmentos, seg);
+		return seg->dirLogica;
+	}
+	else
+	{
+		if (hay_espacio_en_memoria(tamanio))
+		{
+			prog = (t_info_programa *)malloc(sizeof(t_info_programa));
+			prog->programa = idproc;
+			prog->segmentos = list_create();
+			seg = (t_info_segmento *)malloc(sizeof(t_info_segmento));
+			seg->id = idproc;
+			seg->tamanio = tamanio;
+			seg->dirFisica = asignar_direccion_en_memoria();
+			seg->dirLogica = asignar_direccion_logica();
+			list_add(prog->segmentos, seg);
+			list_add(list_programas, prog);
+			return seg->dirLogica;
+		}
+		else
+		{
+			return -1;
+		}
+	}
+}
+
+int destruir_segmentos(int idproc)
+{
+	int tamanio_lista = list_size(list_programas);
+	int i;
+	int indice;
+	int encontre_programa = 0;
+	t_info_programa *prog;
+	// Busco al programa en mi lista de programas
+	for (i = 0; i < tamanio_lista; i++)
+	{
+		prog = list_get(list_programas, i);
+		if (prog->programa == idproc)
+		{
+			indice = i;
+			encontre_programa = 1;
+			break;
+		}
+	}
+	if (encontre_programa == 1)
+	{
+		for (i = list_size(prog->segmentos) - 1; i >= 0; i--)
+		{
+			list_remove(prog->segmentos, i);
+		}
+		list_destroy(prog->segmentos);
+		list_remove(list_programas, indice);
+		return 1;
+	}
+	else
+	{
+		return 0;
+	}
 }
 
 void cambiar_algoritmo()
@@ -366,8 +860,8 @@ void compactar_memoria()
 	int cont;
 	if (cant_segmentos != 0)
 	{
-		// TODO Reflejar cambios en "memoria"
-		printf("Compactando...\n");
+		printw("Compactando...\n");
+		refresh();
 		for (cont = 0; cont < cant_segmentos; cont++)
 		{
 			// Busco la menor direccion en mi lista de segmentos utilizados
@@ -404,6 +898,7 @@ void compactar_memoria()
 					break;
 				}
 			}
+			memcpy((void *)memoria[nueva_direccion], (void *)memoria[segm->dirFisica], segm->tamanio);
 			segm->dirFisica = nueva_direccion;
 			nueva_direccion = segm->tamanio + 1;
 			primer_direccion = space;
@@ -412,7 +907,8 @@ void compactar_memoria()
 	}
 	else
 	{
-		printf("Todavia no hay segmentos a compactar.\n");
+		printw("Todavia no hay segmentos a compactar.\n");
+		refresh();
 	}
 	pthread_mutex_unlock(&semCompactacion);
 }
