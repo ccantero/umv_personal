@@ -212,7 +212,7 @@ int atender_envio_bytes(int base, int offset, int tam, int sock)
 	return 0;
 }
 
-int atender_solicitud_bytes(int base, int offset, int tam, int sock, char *buffer)
+int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buffer)
 {
 	t_mensaje msg;
 	char buf[tam];
@@ -221,6 +221,7 @@ int atender_solicitud_bytes(int base, int offset, int tam, int sock, char *buffe
 	t_info_segmento *seg;
 	int encontre_programa = 0;
 	int encontre_segmento = 0;
+
 	for (i = 0; i < list_size(list_programas); i++)
 	{
 		prog = list_get(list_programas, i);
@@ -243,7 +244,7 @@ int atender_solicitud_bytes(int base, int offset, int tam, int sock, char *buffe
 		}
 		if (encontre_segmento == 1)
 		{
-			if (offset > seg->tamanio && ((seg->tamanio - offset) >= tam))
+			if (tam > seg->tamanio || offset > seg->tamanio || (seg->dirFisica+offset+tam) > (seg->dirFisica+seg->tamanio))
 			{
 				// Devuelvo segmentation fault
 				return SEGMENTATION_FAULT;
@@ -274,8 +275,7 @@ int atender_solicitud_bytes(int base, int offset, int tam, int sock, char *buffe
 		log_info(logger,"seg->dirFisica = %d",seg->dirFisica);
 		log_info(logger,"offset = %d",offset);
 		log_info(logger,"tam = %d",tam);
-		buffer = (char *)malloc(tam + 1);
-		memcpy(buffer, &memoria[seg->dirFisica + offset], tam);
+		memcpy(*buffer, &memoria[seg->dirFisica + offset], tam);
 		log_info(logger,"Buffer =\n%s",buffer);
 		log_info(logger,"memoria =\n%s",memoria);
 		return (seg->dirFisica + offset);
@@ -377,10 +377,44 @@ int hay_espacio_en_memoria(int tam)
 	return 0;
 }
 
+
 int asignar_direccion_logica(int pid, int tamanio)
 {
-
-	return 0;
+	t_info_programa *prog;
+	t_info_segmento *segm;
+	int i;
+	int j;
+	int direccion;
+	int salir = 0;
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		if (prog->programa == pid)
+		{
+			while(salir == 0)
+			{
+				sleep(1);
+				srand((unsigned)time(NULL));
+				direccion = rand() % space;
+				log_info(logger,"direccion = %d", direccion);
+				for(j=0;j< list_size(prog->segmentos);j++)
+				{
+					segm = list_get(prog->segmentos,j);
+					if((direccion > segm->dirLogica && direccion < (segm->dirLogica + tamanio)) ||
+						((direccion+tamanio) > segm->dirLogica && (direccion+tamanio) < (segm->dirLogica + tamanio)) ||
+						(direccion > segm->dirLogica && direccion < (segm->dirLogica + segm->tamanio)) )
+					{
+						break;
+					}
+					else
+					{
+						salir = 1;
+					}
+				}
+			}
+		}
+	}
+	return direccion;
 }
 
 int asignar_direccion_en_memoria(int tamanio)
@@ -696,9 +730,8 @@ void consola (void* param)
    					printw(">");
    					refresh();
    					scanw("%d", &valor_numerico3);
-   					respuesta = atender_solicitud_bytes(valor_numerico, valor_numerico2, valor_numerico3, 0, buffer);
-   					log_info(logger,"Respuesta = %d", respuesta);
-   					//buffer[respuesta+valor_numerico3] = '\0';
+   					buffer = (char *)malloc(valor_numerico3 + 1);
+   					respuesta = atender_solicitud_bytes(valor_numerico, valor_numerico2, valor_numerico3, 0, &buffer);
    					switch(respuesta)
    					{
    					case PROGRAMA_INVALIDO:
@@ -710,11 +743,10 @@ void consola (void* param)
    						refresh();
    						break;
    					default:
-   						log_info(logger,"Posicion de memoria solicitada: %d\n", respuesta);
    						printw("Posicion de memoria solicitada: %d\n", respuesta);
    						printw("Contenido: %s\n", buffer);
    						refresh();
-   						//free(buffer);
+   						free(buffer);
    						break;
    					}
    				}

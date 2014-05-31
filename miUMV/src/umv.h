@@ -79,7 +79,7 @@ int destruir_segmentos(int idproc);
 int transformar_direccion_en_fisica(int direccion, int pid);
 int transformar_direccion_en_logica(int direccion, int pid);
 int verificar_proc_id(int pid);
-int atender_solicitud_bytes(int base, int offset, int tam, int sock, char *buffer);
+int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buffer);
 int atender_envio_bytes(int base, int offset, int tam, int sock);
 void dump_memoria();
 int asignar_direccion_ff(int tamanio);
