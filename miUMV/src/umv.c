@@ -194,7 +194,7 @@ int atender_envio_bytes(int base, int offset, int tam, int sock)
 		}
 		else
 		{
-			return SEGMENTO_INVALIDO;
+			return SEGMENTATION_FAULT;
 		}
 	}
 	else
@@ -253,7 +253,7 @@ int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buff
 		}
 		else
 		{
-			return SEGMENTO_INVALIDO;
+			return SEGMENTATION_FAULT;
 		}
 	}
 	else
@@ -360,7 +360,7 @@ int hay_espacio_en_memoria(int tam)
 	return 0;
 }
 
-int asignar_direccion_logica(int tamanio)
+int asignar_direccion_logica(int pid, int tamanio)
 {
 
 	return 0;
@@ -685,10 +685,6 @@ void consola (void* param)
    						printw("El proceso es invalido.\n");
    						refresh();
    						break;
-   					case SEGMENTO_INVALIDO:
-   						printw("El segmento es invalido.\n");
-   						refresh();
-   						break;
    					case SEGMENTATION_FAULT:
    						printw("Segmentation fault.\n");
    						refresh();
@@ -739,10 +735,6 @@ void consola (void* param)
    						break;
    					case PROGRAMA_INVALIDO:
    						printw("El proceso es invalido.\n");
-   						refresh();
-   						break;
-   					case SEGMENTO_INVALIDO:
-   						printw("El segmento es invalido.\n");
    						refresh();
    						break;
    					case SEGMENTATION_FAULT:
@@ -903,14 +895,50 @@ int verificar_proc_id(int pid)
 
 int transformar_direccion_en_fisica(int direccion, int pid)
 {
-
-	return 0;
+	t_info_programa *prog;
+	t_info_segmento *segm;
+	int i;
+	int j;
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		if (pid == prog->programa)
+		{
+			for (j = 0; j < list_size(prog->segmentos); j++)
+			{
+				segm = list_get(prog->segmentos, j);
+				if (segm->dirLogica == direccion)
+				{
+					return segm->dirFisica;
+				}
+			}
+		}
+	}
+	return -1;
 }
 
 int transformar_direccion_en_logica(int direccion, int pid)
 {
-
-	return 0;
+	t_info_programa *prog;
+	t_info_segmento *segm;
+	int i;
+	int j;
+	for (i = 0; i < list_size(list_programas); i++)
+	{
+		prog = list_get(list_programas, i);
+		if (pid == prog->programa)
+		{
+			for (j = 0; j < list_size(prog->segmentos); j++)
+			{
+				segm = list_get(prog->segmentos, j);
+				if (segm->dirFisica == direccion)
+				{
+					return segm->dirLogica;
+				}
+			}
+		}
+	}
+	return -1;
 }
 
 int crear_segmento(int idproc, int tamanio)
@@ -919,28 +947,28 @@ int crear_segmento(int idproc, int tamanio)
 	t_info_programa *prog;
 	t_info_segmento *seg;
 	int i;
-	if (tamanio_lista != 0)
+	if (hay_espacio_en_memoria(tamanio))
 	{
-		// Busco al programa en mi lista de programas
-		for (i = 0; i < tamanio_lista; i++)
+		if (tamanio_lista != 0)
 		{
-			prog = list_get(list_programas, i);
-			if (prog->programa == idproc)
+			// Busco al programa en mi lista de programas
+			for (i = 0; i < tamanio_lista; i++)
 			{
-				break;
+				prog = list_get(list_programas, i);
+				if (prog->programa == idproc)
+				{
+					break;
+				}
 			}
+			seg = (t_info_segmento *)malloc(sizeof(t_info_segmento));
+			seg->id = idproc;
+			seg->tamanio = tamanio;
+			seg->dirFisica = asignar_direccion_en_memoria(tamanio);
+			seg->dirLogica = asignar_direccion_logica(tamanio);
+			list_add(prog->segmentos, seg);
+			return seg->dirLogica;
 		}
-		seg = (t_info_segmento *)malloc(sizeof(t_info_segmento));
-		seg->id = idproc;
-		seg->tamanio = tamanio;
-		seg->dirFisica = asignar_direccion_en_memoria(tamanio);
-		seg->dirLogica = asignar_direccion_logica(tamanio);
-		list_add(prog->segmentos, seg);
-		return seg->dirLogica;
-	}
-	else
-	{
-		if (hay_espacio_en_memoria(tamanio))
+		else
 		{
 			prog = (t_info_programa *)malloc(sizeof(t_info_programa));
 			prog->programa = idproc;
@@ -954,10 +982,10 @@ int crear_segmento(int idproc, int tamanio)
 			list_add(list_programas, prog);
 			return seg->dirLogica;
 		}
-		else
-		{
-			return -1;
-		}
+	}
+	else
+	{
+		return -1;
 	}
 }
 
@@ -1051,10 +1079,6 @@ void compactar_memoria()
 					{
 						primer_direccion = segm->dirFisica;
 						primer_programa = segm->id;
-					}
-					else
-					{
-						// TODO
 					}
 				}
 			}

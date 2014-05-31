@@ -68,7 +68,7 @@ void conexion_nueva(void *param);
 void atender_kernel(int sock);
 void atender_cpu(int sock);
 int asignar_direccion_en_memoria(int tamanio);
-int asignar_direccion_logica(int tamanio);
+int asignar_direccion_logica(int pid, int tamanio);
 void compactar_memoria();
 int obtener_cant_segmentos();
 void cambiar_retardo(int valor);
