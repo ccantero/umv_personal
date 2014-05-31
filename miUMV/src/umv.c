@@ -964,7 +964,7 @@ int crear_segmento(int idproc, int tamanio)
 			seg->id = idproc;
 			seg->tamanio = tamanio;
 			seg->dirFisica = asignar_direccion_en_memoria(tamanio);
-			seg->dirLogica = asignar_direccion_logica(tamanio);
+			seg->dirLogica = asignar_direccion_logica(idproc, tamanio);
 			list_add(prog->segmentos, seg);
 			return seg->dirLogica;
 		}
@@ -977,7 +977,7 @@ int crear_segmento(int idproc, int tamanio)
 			seg->id = idproc;
 			seg->tamanio = tamanio;
 			seg->dirFisica = asignar_direccion_en_memoria(tamanio);
-			seg->dirLogica = asignar_direccion_logica(tamanio);
+			seg->dirLogica = asignar_direccion_logica(idproc, tamanio);
 			list_add(prog->segmentos, seg);
 			list_add(list_programas, prog);
 			return seg->dirLogica;
