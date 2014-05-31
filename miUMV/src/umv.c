@@ -57,8 +57,6 @@ int main(int argc, char *argv[])
 			perror("accept");
 			continue;
 		}
-		printf("Se recibio una conexion desde %s\n", inet_ntoa(their_addr.sin_addr));
-		printf("Contenido de newfd: %d\n", newfd);
 		pthread_create(&conexiones[cant_conexiones], NULL, (void *)conexion_nueva, (void *)&newfd);
 		cant_conexiones++;
 	}
@@ -189,7 +187,12 @@ int atender_envio_bytes(int base, int offset, int tam, int sock)
 			else
 			{
 				// La posicion de memoria es válida
+				log_info(logger,"seg->dirFisica  = %d",seg->dirFisica );
+				log_info(logger,"tam = %d",tam);
+				log_info(logger,"offset = %d",offset);
+				log_info(logger,"Buffer \n%s",buffer);
 				memcpy(&memoria[seg->dirFisica + offset], buffer, tam);
+				log_info(logger,"memoria %s\n",memoria);
 			}
 		}
 		else
@@ -209,7 +212,7 @@ int atender_envio_bytes(int base, int offset, int tam, int sock)
 	return 0;
 }
 
-int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buffer)
+int atender_solicitud_bytes(int base, int offset, int tam, int sock, char *buffer)
 {
 	t_mensaje msg;
 	char buf[tam];
@@ -268,8 +271,13 @@ int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buff
 	}
 	else
 	{
-		*buffer = (char *)malloc(tam + 1);
-		memcpy(*buffer, &memoria[seg->dirFisica + offset], tam);
+		log_info(logger,"seg->dirFisica = %d",seg->dirFisica);
+		log_info(logger,"offset = %d",offset);
+		log_info(logger,"tam = %d",tam);
+		buffer = (char *)malloc(tam + 1);
+		memcpy(buffer, &memoria[seg->dirFisica + offset], tam);
+		log_info(logger,"Buffer =\n%s",buffer);
+		log_info(logger,"memoria =\n%s",memoria);
 		return (seg->dirFisica + offset);
 	}
 	return 0;
@@ -293,14 +301,19 @@ void atender_kernel(int sock)
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
 		break;
 	case CREARSEGMENTO:
+		log_info(logger,"Inicio CREARSEGMENTO");
 		pthread_mutex_lock(&semCompactacion);
 		recv(sock, &msg2, sizeof(t_msg_crear_segmento), 0);
+		log_info(logger,"Id Programa = %d",msg2.id_programa);
+		log_info(logger,"Tamanio = %d",msg2.tamanio);
 		mensaje.datosNumericos = crear_segmento(msg2.id_programa, msg2.tamanio);
 		pthread_mutex_unlock(&semCompactacion);
 		mensaje.id_proceso = UMV;
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
+		log_info(logger,"FIN CREARSEGMENTO");
 		break;
 	case ENVIOBYTES:
+		log_info(logger,"Inicio ENVIOBYTES");
 		pthread_mutex_lock(&semProcesoActivo);
 		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
 		proceso_activo = msg.id_programa;
@@ -313,6 +326,7 @@ void atender_kernel(int sock)
 			send(sock, &mensaje, sizeof(t_mensaje), 0);
 		}
 		pthread_mutex_unlock(&semProcesoActivo);
+		log_info(logger,"Fin ENVIOBYTES");
 		break;
 	}
 }
@@ -326,6 +340,7 @@ int hay_espacio_en_memoria(int tam)
 	t_info_programa *prog;
 	t_info_segmento *seg;
 	int espacio_libre = 0;
+	log_info(logger, "Inicio hay_espacio_en_memoria");
 	for (i = 0; i < space; i++)
 	{
 		mem[i] = 0;
@@ -349,6 +364,7 @@ int hay_espacio_en_memoria(int tam)
 			espacio_libre++;
 			if (espacio_libre == tam)
 			{
+				log_info(logger, "Fin hay_espacio_en_memoria");
 				return 1;
 			}
 		}
@@ -357,6 +373,7 @@ int hay_espacio_en_memoria(int tam)
 			espacio_libre = 0;
 		}
 	}
+	log_info(logger, "Fin hay_espacio_en_memoria");
 	return 0;
 }
 
@@ -523,7 +540,8 @@ int asignar_direccion_ff(int tamanio)
 	int j;
 	t_info_programa *prog;
 	t_info_segmento *segm;
-	while (salir != 0)
+
+	while (salir == 0)
 	{
 		for (i = 0; i < list_size(list_programas); i++)
 		{
@@ -531,7 +549,7 @@ int asignar_direccion_ff(int tamanio)
 			for (j = 0; j < list_size(prog->segmentos); j++)
 			{
 				segm = list_get(prog->segmentos, j);
-				if (segm->dirFisica < primer_direccion && segm->dirFisica > direccion_arranque)
+				if (segm->dirFisica < primer_direccion && segm->dirFisica >= direccion_arranque)
 				{
 					primer_direccion = segm->dirFisica;
 					ultima_direccion = segm->dirFisica + segm->tamanio;
@@ -553,7 +571,7 @@ int asignar_direccion_ff(int tamanio)
 		}
 		else
 		{
-			if (primer_direccion - direccion_arranque > tamanio)
+			if (primer_direccion - direccion_arranque >= tamanio)
 			{
 				dir = direccion_arranque;
 				salir = 1;
@@ -678,7 +696,9 @@ void consola (void* param)
    					printw(">");
    					refresh();
    					scanw("%d", &valor_numerico3);
-   					respuesta = atender_solicitud_bytes(valor_numerico, valor_numerico2, valor_numerico3, 0, &buffer);
+   					respuesta = atender_solicitud_bytes(valor_numerico, valor_numerico2, valor_numerico3, 0, buffer);
+   					log_info(logger,"Respuesta = %d", respuesta);
+   					//buffer[respuesta+valor_numerico3] = '\0';
    					switch(respuesta)
    					{
    					case PROGRAMA_INVALIDO:
@@ -690,10 +710,11 @@ void consola (void* param)
    						refresh();
    						break;
    					default:
+   						log_info(logger,"Posicion de memoria solicitada: %d\n", respuesta);
    						printw("Posicion de memoria solicitada: %d\n", respuesta);
    						printw("Contenido: %s\n", buffer);
    						refresh();
-   						free(buffer);
+   						//free(buffer);
    						break;
    					}
    				}
@@ -949,23 +970,30 @@ int crear_segmento(int idproc, int tamanio)
 	int i;
 	if (hay_espacio_en_memoria(tamanio))
 	{
+		log_info(logger,"hay_espacio_en_memoria");
 		if (tamanio_lista != 0)
 		{
+			log_info(logger,"tamanio_lista != 0");
 			// Busco al programa en mi lista de programas
 			for (i = 0; i < tamanio_lista; i++)
 			{
 				prog = list_get(list_programas, i);
 				if (prog->programa == idproc)
 				{
+					log_info(logger,"Encontre programa");
 					break;
 				}
 			}
 			seg = (t_info_segmento *)malloc(sizeof(t_info_segmento));
+			log_info(logger,"No explote en el malloc");
 			seg->id = idproc;
 			seg->tamanio = tamanio;
 			seg->dirFisica = asignar_direccion_en_memoria(tamanio);
+			log_info(logger,"FIN asignar_direccion_en_memoria");
 			seg->dirLogica = asignar_direccion_logica(idproc, tamanio);
+			log_info(logger,"FIN asignar_direccion_logica");
 			list_add(prog->segmentos, seg);
+			log_info(logger,"fin hay_espacio_en_memoria");
 			return seg->dirLogica;
 		}
 		else
