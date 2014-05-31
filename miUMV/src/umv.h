@@ -67,8 +67,8 @@ void GetInfoConfFile(void);
 void conexion_nueva(void *param);
 void atender_kernel(int sock);
 void atender_cpu(int sock);
-int asignar_direccion_en_memoria();
-int asignar_direccion_logica();
+int asignar_direccion_en_memoria(int tamanio);
+int asignar_direccion_logica(int tamanio);
 void compactar_memoria();
 int obtener_cant_segmentos();
 void cambiar_retardo(int valor);
@@ -82,5 +82,11 @@ int verificar_proc_id(int pid);
 int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buffer);
 int atender_envio_bytes(int base, int offset, int tam, int sock);
 void dump_memoria();
+int asignar_direccion_ff(int tamanio);
+int asignar_direccion_wf(int tamanio);
+int obtener_base_segmento(int index, int arranque);
+int obtener_limite_segmento(int index, int arranque);
+int obtener_direccion_segmento(int arranque);
+int obtener_direccion_mas_offset_segmento(int arranque);
 
 #endif /* UMV_H_ */
