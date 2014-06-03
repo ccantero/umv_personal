@@ -1155,7 +1155,7 @@ void compactar_memoria()
 			}
 			memcpy(&memoria[nueva_direccion], &memoria[segm->dirFisica], segm->tamanio);
 			segm->dirFisica = nueva_direccion;
-			nueva_direccion = segm->tamanio + 1;
+			nueva_direccion = segm->dirFisica + segm->tamanio + 1;
 			primer_direccion = space;
 			arranque = nueva_direccion;
 		}
