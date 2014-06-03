@@ -669,7 +669,8 @@ void consola (void* param)
    				printw(">");
    				refresh();
    				scanw("%d", &proc_id);
-   				respuesta = verificar_proc_id(proc_id);
+   				//respuesta = verificar_proc_id(proc_id);
+   				respuesta = 1;
    				if (respuesta == 0)
    				{
    					printw("El proceso ingresado no existe en memoria.\n");
@@ -1000,32 +1001,26 @@ int crear_segmento(int idproc, int tamanio)
 	t_info_programa *prog;
 	t_info_segmento *seg;
 	int i;
+	int encontre_programa = 0;
 	if (hay_espacio_en_memoria(tamanio))
 	{
-		log_info(logger,"hay_espacio_en_memoria");
-		if (tamanio_lista != 0)
+		for (i = 0; i < tamanio_lista; i++)
 		{
-			log_info(logger,"tamanio_lista != 0");
-			// Busco al programa en mi lista de programas
-			for (i = 0; i < tamanio_lista; i++)
+			prog = list_get(list_programas, i);
+			if (prog->programa == idproc)
 			{
-				prog = list_get(list_programas, i);
-				if (prog->programa == idproc)
-				{
-					log_info(logger,"Encontre programa");
-					break;
-				}
+				encontre_programa = 1;
+				break;
 			}
+		}
+		if (encontre_programa == 1)
+		{
 			seg = (t_info_segmento *)malloc(sizeof(t_info_segmento));
-			log_info(logger,"No explote en el malloc");
 			seg->id = idproc;
 			seg->tamanio = tamanio;
 			seg->dirFisica = asignar_direccion_en_memoria(tamanio);
-			log_info(logger,"FIN asignar_direccion_en_memoria");
 			seg->dirLogica = asignar_direccion_logica(idproc, tamanio);
-			log_info(logger,"FIN asignar_direccion_logica");
 			list_add(prog->segmentos, seg);
-			log_info(logger,"fin hay_espacio_en_memoria");
 			return seg->dirLogica;
 		}
 		else
