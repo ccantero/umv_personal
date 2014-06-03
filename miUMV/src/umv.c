@@ -449,58 +449,49 @@ int asignar_direccion_en_memoria(int tamanio)
 int asignar_direccion_wf(int tamanio)
 {
 	int espacio_mas_grande = 0;
-	int base_segmento;
-	int limite_segmento;
-	int ultimo_limite;
-	int ultima_direccion = 0;
-	int primer_direccion;
+	int nuevo_espacio;
+	int ultimo_limite = 0;
+	int ultima_base;
+	int primer_direccion = 0;
 	int i;
+	int direccion_retorno = -1;
+
 	for (i = 0; i < obtener_cant_segmentos(); i++)
 	{
-		base_segmento = obtener_base_segmento(i, 0);
-		limite_segmento = obtener_limite_segmento(i, 0);
-		if (ultima_direccion == 0)
+		ultima_base = obtener_direccion_segmento(primer_direccion);
+		ultimo_limite = obtener_direccion_mas_offset_segmento(primer_direccion);
+		log_info(logger, "ultima base: %d", ultima_base);
+		log_info(logger, "ultimo limite: %d", ultimo_limite);
+		nuevo_espacio = ultima_base - primer_direccion;
+		if (nuevo_espacio > espacio_mas_grande)
 		{
-			if (base_segmento - ultima_direccion > espacio_mas_grande)
-			{
-				espacio_mas_grande = base_segmento - ultima_direccion;
-				primer_direccion = ultima_direccion;
-				ultima_direccion = base_segmento - 1;
-				ultimo_limite = limite_segmento;
-			}
+			espacio_mas_grande = nuevo_espacio;
+			direccion_retorno = primer_direccion;
 		}
-		else
-		{
-			if (base_segmento - ultimo_limite - 1 > espacio_mas_grande)
-			{
-				espacio_mas_grande = base_segmento - ultimo_limite - 1;
-				primer_direccion = ultimo_limite + 1;
-				ultima_direccion = base_segmento - 1;
-				ultimo_limite = limite_segmento;
-			}
-		}
-	}
-	if (space - 1 - ultimo_limite - 1 > espacio_mas_grande)
-	{
-		espacio_mas_grande = space - 1 - ultimo_limite - 1;
 		primer_direccion = ultimo_limite + 1;
-		ultima_direccion = space - 1;
 	}
-	return primer_direccion;
-}
-
-int obtener_base_segmento(int index, int arranque)
-{
-	int ultima_direccion = obtener_direccion_segmento(arranque);
-	if (index == 1)
+	ultima_base = space - 1;
+	nuevo_espacio = ultima_base - ultimo_limite;
+	if (nuevo_espacio > espacio_mas_grande)
 	{
-		return ultima_direccion;
+		espacio_mas_grande = nuevo_espacio;
+		direccion_retorno = primer_direccion;
+	}
+	if (espacio_mas_grande == 0)
+	{
+		return -1;
 	}
 	else
 	{
-		ultima_direccion = obtener_base_segmento(index - 1, ultima_direccion + 1);
+		if (espacio_mas_grande >= tamanio)
+		{
+			return direccion_retorno;
+		}
+		else
+		{
+			return -1;
+		}
 	}
-	return ultima_direccion;
 }
 
 int obtener_direccion_segmento(int arranque)
@@ -523,20 +514,6 @@ int obtener_direccion_segmento(int arranque)
 		}
 	}
 	return primer_direccion;
-}
-
-int obtener_limite_segmento(int index, int arranque)
-{
-	int ultima_direccion = obtener_direccion_mas_offset_segmento(arranque);
-	if (index == 1)
-	{
-		return ultima_direccion;
-	}
-	else
-	{
-		ultima_direccion = obtener_limite_segmento(index - 1, ultima_direccion + 1);
-	}
-	return ultima_direccion;
 }
 
 int obtener_direccion_mas_offset_segmento(int arranque)

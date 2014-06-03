@@ -84,8 +84,6 @@ int atender_envio_bytes(int base, int offset, int tam, int sock);
 void dump_memoria();
 int asignar_direccion_ff(int tamanio);
 int asignar_direccion_wf(int tamanio);
-int obtener_base_segmento(int index, int arranque);
-int obtener_limite_segmento(int index, int arranque);
 int obtener_direccion_segmento(int arranque);
 int obtener_direccion_mas_offset_segmento(int arranque);
 
