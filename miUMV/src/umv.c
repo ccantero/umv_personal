@@ -272,12 +272,7 @@ int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buff
 	}
 	else
 	{
-		log_info(logger,"seg->dirFisica = %d",seg->dirFisica);
-		log_info(logger,"offset = %d",offset);
-		log_info(logger,"tam = %d",tam);
 		memcpy(*buffer, &memoria[seg->dirFisica + offset], tam);
-		log_info(logger,"Buffer =\n%s",buffer);
-		log_info(logger,"memoria =\n%s",memoria);
 		return (seg->dirFisica + offset);
 	}
 	return 0;

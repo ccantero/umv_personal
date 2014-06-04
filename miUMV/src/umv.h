@@ -73,7 +73,6 @@ void compactar_memoria();
 int obtener_cant_segmentos();
 void cambiar_retardo(int valor);
 void cambiar_algoritmo();
-int hay_espacio_en_memoria(int tam);
 int crear_segmento(int idproc, int tamanio);
 int destruir_segmentos(int idproc);
 int transformar_direccion_en_fisica(int direccion, int pid);
