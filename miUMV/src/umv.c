@@ -331,53 +331,6 @@ void atender_kernel(int sock)
 	}
 }
 
-int hay_espacio_en_memoria(int tam)
-{
-	int mem[space];
-	int i;
-	int j;
-	int k;
-	t_info_programa *prog;
-	t_info_segmento *seg;
-	int espacio_libre = 0;
-	log_info(logger, "Inicio hay_espacio_en_memoria");
-	for (i = 0; i < space; i++)
-	{
-		mem[i] = 0;
-	}
-	for (i = 0; i < list_size(list_programas); i++)
-	{
-		prog = list_get(list_programas, i);
-		for (j = 0; j < list_size(prog->segmentos); j++)
-		{
-			seg = list_get(prog->segmentos, j);
-			for (k = 0; k < seg->tamanio; k++)
-			{
-				mem[k + seg->dirFisica] = 1;
-			}
-		}
-	}
-	for (i = 0; i < space; i++)
-	{
-		if (mem[i] == 0)
-		{
-			espacio_libre++;
-			if (espacio_libre == tam)
-			{
-				log_info(logger, "Fin hay_espacio_en_memoria");
-				return 1;
-			}
-		}
-		else
-		{
-			espacio_libre = 0;
-		}
-	}
-	log_info(logger, "Fin hay_espacio_en_memoria");
-	return 0;
-}
-
-
 int asignar_direccion_logica(int pid, int tamanio)
 {
 	t_info_programa *prog;
@@ -455,13 +408,10 @@ int asignar_direccion_wf(int tamanio)
 	int primer_direccion = 0;
 	int i;
 	int direccion_retorno = -1;
-
 	for (i = 0; i < obtener_cant_segmentos(); i++)
 	{
 		ultima_base = obtener_direccion_segmento(primer_direccion);
 		ultimo_limite = obtener_direccion_mas_offset_segmento(primer_direccion);
-		log_info(logger, "ultima base: %d", ultima_base);
-		log_info(logger, "ultimo limite: %d", ultimo_limite);
 		nuevo_espacio = ultima_base - primer_direccion;
 		if (nuevo_espacio > espacio_mas_grande)
 		{
@@ -470,7 +420,7 @@ int asignar_direccion_wf(int tamanio)
 		}
 		primer_direccion = ultimo_limite + 1;
 	}
-	ultima_base = space - 1;
+	ultima_base = space;
 	nuevo_espacio = ultima_base - ultimo_limite;
 	if (nuevo_espacio > espacio_mas_grande)
 	{
@@ -533,7 +483,7 @@ int obtener_direccion_mas_offset_segmento(int arranque)
 			if (segm->dirFisica < primer_direccion && segm->dirFisica >= arranque)
 			{
 				primer_direccion = segm->dirFisica;
-				direccion_mas_offset = segm->dirFisica + segm->tamanio;
+				direccion_mas_offset = segm->dirFisica + segm->tamanio - 1;
 			}
 		}
 	}
@@ -551,7 +501,6 @@ int asignar_direccion_ff(int tamanio)
 	int j;
 	t_info_programa *prog;
 	t_info_segmento *segm;
-
 	while (salir == 0)
 	{
 		for (i = 0; i < list_size(list_programas); i++)
@@ -563,7 +512,7 @@ int asignar_direccion_ff(int tamanio)
 				if (segm->dirFisica < primer_direccion && segm->dirFisica >= direccion_arranque)
 				{
 					primer_direccion = segm->dirFisica;
-					ultima_direccion = segm->dirFisica + segm->tamanio;
+					ultima_direccion = segm->dirFisica + segm->tamanio - 1;
 				}
 			}
 		}
@@ -979,7 +928,8 @@ int crear_segmento(int idproc, int tamanio)
 	t_info_segmento *seg;
 	int i;
 	int encontre_programa = 0;
-	if (hay_espacio_en_memoria(tamanio))
+	int hay_espacio_valido = asignar_direccion_en_memoria(tamanio);
+	if (hay_espacio_valido != -1)
 	{
 		for (i = 0; i < tamanio_lista; i++)
 		{
@@ -1028,6 +978,7 @@ int destruir_segmentos(int idproc)
 	int indice;
 	int encontre_programa = 0;
 	t_info_programa *prog;
+	t_info_segmento *segm;
 	// Busco al programa en mi lista de programas
 	for (i = 0; i < tamanio_lista; i++)
 	{
@@ -1043,6 +994,7 @@ int destruir_segmentos(int idproc)
 	{
 		for (i = list_size(prog->segmentos) - 1; i >= 0; i--)
 		{
+			segm = list_get(prog->segmentos, i);
 			list_remove(prog->segmentos, i);
 		}
 		list_destroy(prog->segmentos);
@@ -1132,7 +1084,7 @@ void compactar_memoria()
 			}
 			memcpy(&memoria[nueva_direccion], &memoria[segm->dirFisica], segm->tamanio);
 			segm->dirFisica = nueva_direccion;
-			nueva_direccion = segm->dirFisica + segm->tamanio + 1;
+			nueva_direccion = segm->dirFisica + segm->tamanio;
 			primer_direccion = space;
 			arranque = nueva_direccion;
 		}
