@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 	memoria = malloc(space);
 	list_programas = list_create();
 
-
+	// TODO
 	direccion_logica = 0;
 
 
@@ -115,6 +115,7 @@ void atender_cpu(int sock)
 	{
 	case SOLICITUDBYTES:
 		pthread_mutex_lock(&semProcesoActivo);
+		log_info(logger, "Recibi solicitud de bytes de cpu.");
 		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
 		proceso_activo = msg.id_programa;
 		recv(sock, &msg2, sizeof(t_msg_solicitud_bytes), 0);
@@ -126,9 +127,11 @@ void atender_cpu(int sock)
 			send(sock, &mensaje, sizeof(t_mensaje), 0);
 		}
 		pthread_mutex_unlock(&semProcesoActivo);
+		log_info(logger, "Devolvi solicitud de bytes a cpu.");
 		break;
 	case ENVIOBYTES:
 		pthread_mutex_lock(&semProcesoActivo);
+		log_info(logger, "Recibi envio de bytes de cpu.");
 		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
 		proceso_activo = msg.id_programa;
 		recv(sock, &msg3, sizeof(t_msg_envio_bytes), 0);
@@ -140,6 +143,7 @@ void atender_cpu(int sock)
 			send(sock, &mensaje, sizeof(t_mensaje), 0);
 		}
 		pthread_mutex_unlock(&semProcesoActivo);
+		log_info(logger, "Recibi el envio de bytes de cpu.");
 		break;
 	}
 }
@@ -191,12 +195,7 @@ int atender_envio_bytes(int base, int offset, int tam, int sock)
 			else
 			{
 				// La posicion de memoria es válida
-				log_info(logger,"seg->dirFisica  = %d",seg->dirFisica );
-				log_info(logger,"tam = %d",tam);
-				log_info(logger,"offset = %d",offset);
-				log_info(logger,"Buffer \n%s",buffer);
 				memcpy(&memoria[seg->dirFisica + offset], buffer, tam);
-				log_info(logger,"memoria %s\n",memoria);
 			}
 		}
 		else
