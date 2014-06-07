@@ -23,6 +23,7 @@
 #include <commons/collections/list.h>
 #include <src/silverstack.h>
 #include <ncurses.h>
+#include <time.h>
 
 #define MAXCONEXIONES 25
 #define PATH_CONFIG "../conf"

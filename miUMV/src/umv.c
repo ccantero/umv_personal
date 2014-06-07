@@ -296,19 +296,14 @@ void atender_kernel(int sock)
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
 		break;
 	case CREARSEGMENTO:
-		log_info(logger,"Inicio CREARSEGMENTO");
 		pthread_mutex_lock(&semCompactacion);
 		recv(sock, &msg2, sizeof(t_msg_crear_segmento), 0);
-		log_info(logger,"Id Programa = %d",msg2.id_programa);
-		log_info(logger,"Tamanio = %d",msg2.tamanio);
 		mensaje.datosNumericos = crear_segmento(msg2.id_programa, msg2.tamanio);
 		pthread_mutex_unlock(&semCompactacion);
 		mensaje.id_proceso = UMV;
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
-		log_info(logger,"FIN CREARSEGMENTO");
 		break;
 	case ENVIOBYTES:
-		log_info(logger,"Inicio ENVIOBYTES");
 		pthread_mutex_lock(&semProcesoActivo);
 		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
 		proceso_activo = msg.id_programa;
@@ -321,7 +316,6 @@ void atender_kernel(int sock)
 			send(sock, &mensaje, sizeof(t_mensaje), 0);
 		}
 		pthread_mutex_unlock(&semProcesoActivo);
-		log_info(logger,"Fin ENVIOBYTES");
 		break;
 	}
 }
@@ -334,6 +328,7 @@ int asignar_direccion_logica(int pid, int tamanio)
 	int j;
 	int direccion;
 	int salir = 0;
+	int direccion_valida;
 	for (i = 0; i < list_size(list_programas); i++)
 	{
 		prog = list_get(list_programas, i);
@@ -341,23 +336,31 @@ int asignar_direccion_logica(int pid, int tamanio)
 		{
 			while(salir == 0)
 			{
-				sleep(1);
-				srand((unsigned)time(NULL));
-				direccion = rand() % space;
-				log_info(logger,"direccion = %d", direccion);
-				for(j=0;j< list_size(prog->segmentos);j++)
+				usleep(10);
+				srand(time(NULL));
+				direccion = rand() % 1000001;
+				for(j = 0; j < list_size(prog->segmentos); j++)
 				{
-					segm = list_get(prog->segmentos,j);
+					segm = list_get(prog->segmentos, j);
 					if((direccion > segm->dirLogica && direccion < (segm->dirLogica + tamanio)) ||
 						((direccion+tamanio) > segm->dirLogica && (direccion+tamanio) < (segm->dirLogica + tamanio)) ||
 						(direccion > segm->dirLogica && direccion < (segm->dirLogica + segm->tamanio)) )
 					{
-						break;
+						direccion_valida = 1;
 					}
 					else
 					{
-						salir = 1;
+						direccion_valida = 0;
+						break;
 					}
+				}
+				if (direccion_valida == 1)
+				{
+					salir = 1;
+				}
+				else
+				{
+					direccion_valida = 0;
 				}
 			}
 		}
@@ -818,6 +821,9 @@ void dump_memoria()
 	printw("Dir. Fisica Segmento\n");
 	x += 25;
 	move(y, x);
+	printw("Dir. Logica Segmento\n");
+	x += 30;
+	move(y, x);
 	printw("Tamanio Segmento\n");
 	refresh();
 	t_info_programa *prog;
@@ -838,6 +844,9 @@ void dump_memoria()
 			move(y, x);
 			printw("%d", seg->dirFisica);
 			x += 25;
+			move(y, x);
+			printw("%d", seg->dirLogica);
+			x += 30;
 			move(y, x);
 			printw("%d", seg->tamanio);
 			y++;
