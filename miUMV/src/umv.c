@@ -19,6 +19,10 @@ int main(int argc, char *argv[])
 	memoria = malloc(space);
 	list_programas = list_create();
 
+
+	direccion_logica = 0;
+
+
 	int sockfd;
 	int newfd;
 	struct sockaddr_in my_addr;
@@ -291,23 +295,28 @@ void atender_kernel(int sock)
 	case DESTRUIRSEGMENTOS:
 		pthread_mutex_lock(&semCompactacion);
 		recv(sock, &msg, sizeof(t_msg_destruir_segmentos), 0);
+		log_info(logger, "Se recibio peticion para destruir segmentos de kernel.");
 		mensaje.datosNumericos = destruir_segmentos(msg.id_programa);
 		pthread_mutex_unlock(&semCompactacion);
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
+		log_info(logger, "Se eliminaron segmentos de programa %d", msg.id_programa);
 		break;
 	case CREARSEGMENTO:
 		pthread_mutex_lock(&semCompactacion);
 		recv(sock, &msg2, sizeof(t_msg_crear_segmento), 0);
+		log_info(logger, "Se recibe peticion para crear segmento de kernel.");
 		mensaje.datosNumericos = crear_segmento(msg2.id_programa, msg2.tamanio);
 		pthread_mutex_unlock(&semCompactacion);
 		mensaje.id_proceso = UMV;
 		send(sock, &mensaje, sizeof(t_mensaje), 0);
+		log_info(logger, "Se creo segmento de programa %d", msg2.id_programa);
 		break;
 	case ENVIOBYTES:
 		pthread_mutex_lock(&semProcesoActivo);
 		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
 		proceso_activo = msg.id_programa;
 		recv(sock, &msg3, sizeof(t_msg_envio_bytes), 0);
+		log_info(logger, "Se recibio peticion de bytes de kernel.");
 		respuesta = atender_envio_bytes(msg3.base, msg3.offset, msg3.tamanio, sock);
 		if (respuesta != 0)
 		{
@@ -316,12 +325,18 @@ void atender_kernel(int sock)
 			send(sock, &mensaje, sizeof(t_mensaje), 0);
 		}
 		pthread_mutex_unlock(&semProcesoActivo);
+		log_info(logger, "Se enviaron %d bytes de programa %d", msg3.tamanio, msg.id_programa);
 		break;
 	}
 }
 
 int asignar_direccion_logica(int pid, int tamanio)
 {
+	direccion_logica += 1000;
+	return direccion_logica;
+
+
+	/*
 	t_info_programa *prog;
 	t_info_segmento *segm;
 	int i;
@@ -366,6 +381,7 @@ int asignar_direccion_logica(int pid, int tamanio)
 		}
 	}
 	return direccion;
+	*/
 }
 
 int asignar_direccion_en_memoria(int tamanio)

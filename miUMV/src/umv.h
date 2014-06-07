@@ -63,6 +63,8 @@ int port;
 int proceso_activo;
 int retardo;
 
+int direccion_logica;
+
 void consola (void* param);
 void GetInfoConfFile(void);
 void conexion_nueva(void *param);
