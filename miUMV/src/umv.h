@@ -89,4 +89,6 @@ int asignar_direccion_wf(int tamanio);
 int obtener_direccion_segmento(int arranque);
 int obtener_direccion_mas_offset_segmento(int arranque);
 
+int atender_solicitud_bytes_int(int base, int offset, int tam, int sock, int **buffer);
+
 #endif /* UMV_H_ */
