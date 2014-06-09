@@ -19,9 +19,6 @@ int main(int argc, char *argv[])
 	memoria = malloc(space);
 	list_programas = list_create();
 
-	// TODO Revisar asignacion logica de direcciones
-	direccion_logica = 0;
-
 	int sockfd;
 	int newfd;
 	struct sockaddr_in my_addr;
