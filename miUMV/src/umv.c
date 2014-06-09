@@ -383,7 +383,7 @@ void atender_kernel(int sock)
 		recv(sock, &msg, sizeof(t_msg_cambio_proceso_activo), 0);
 		proceso_activo = msg.id_programa;
 		recv(sock, &msg3, sizeof(t_msg_envio_bytes), 0);
-		log_info(logger, "Se recibio peticion de bytes de kernel.");
+		log_info(logger, "Se recibio envio de bytes de kernel.");
 		respuesta = atender_envio_bytes(msg3.base, msg3.offset, msg3.tamanio, sock);
 		if (respuesta != 0)
 		{
@@ -391,7 +391,7 @@ void atender_kernel(int sock)
 			mensaje.id_proceso = proceso_activo;
 			send(sock, &mensaje, sizeof(t_mensaje), 0);
 		}
-		log_info(logger, "Se enviaron %d bytes de programa %d", msg3.tamanio, msg.id_programa);
+		log_info(logger, "Se recibieron %d bytes de programa %d", msg3.tamanio, msg.id_programa);
 		pthread_mutex_unlock(&semProcesoActivo);
 		break;
 	}
@@ -399,16 +399,12 @@ void atender_kernel(int sock)
 
 int asignar_direccion_logica(int pid, int tamanio)
 {
-	direccion_logica += 1000;
-	return direccion_logica;
-
-
-	/*
 	t_info_programa *prog;
 	t_info_segmento *segm;
 	int i;
 	int j;
-	int direccion;
+	srand(time(NULL));
+	int direccion = rand() % (space - tamanio);
 	int salir = 0;
 	int direccion_valida;
 	for (i = 0; i < list_size(list_programas); i++)
@@ -418,37 +414,40 @@ int asignar_direccion_logica(int pid, int tamanio)
 		{
 			while(salir == 0)
 			{
-				usleep(10);
+				sleep(1);
 				srand(time(NULL));
-				direccion = rand() % 1000001;
-				for(j = 0; j < list_size(prog->segmentos); j++)
+				direccion = rand() % (space + 1);
+				log_info(logger, "Direccion de rand(): %d", direccion);
+				log_info(logger, "Direccion + tamanio: %d", (direccion + tamanio));
+				if((direccion + tamanio) < space)
 				{
-					segm = list_get(prog->segmentos, j);
-					if((direccion > segm->dirLogica && direccion < (segm->dirLogica + tamanio)) ||
-						((direccion+tamanio) > segm->dirLogica && (direccion+tamanio) < (segm->dirLogica + tamanio)) ||
-						(direccion > segm->dirLogica && direccion < (segm->dirLogica + segm->tamanio)) )
+					for(j = 0; j < list_size(prog->segmentos); j++)
 					{
-						direccion_valida = 1;
+						segm = list_get(prog->segmentos, j);
+						if( (direccion >= (segm->dirLogica + segm->tamanio)) ||
+							((direccion + tamanio) < segm->dirLogica) )
+						{
+							direccion_valida = 1;
+						}
+						else
+						{
+							direccion_valida = 0;
+							break;
+						}
+					}
+					if (direccion_valida == 1)
+					{
+						salir = 1;
 					}
 					else
 					{
 						direccion_valida = 0;
-						break;
 					}
-				}
-				if (direccion_valida == 1)
-				{
-					salir = 1;
-				}
-				else
-				{
-					direccion_valida = 0;
 				}
 			}
 		}
 	}
 	return direccion;
-	*/
 }
 
 int asignar_direccion_en_memoria(int tamanio)
