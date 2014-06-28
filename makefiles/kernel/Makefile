@@ -9,6 +9,7 @@ COMMONS_L := -L"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/commons/Debug
 PARSER_L := -L"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/parser/Debug"
 
 make:
-	gcc -Wall programa.c $(LIBS) $(SILVER_I) $(COMMONS_I) $(PARSER_I) $(SILVER_L) $(COMMONS_L) $(PARSER_L) -o program   
+	gcc -Wall kernel.c protocol.c $(LIBS) $(SILVER_I) $(COMMONS_I) $(PARSER_I) $(SILVER_L) $(COMMONS_L) $(PARSER_L) -o kernel    
 clean:
-	rm $($PROG) program
+	rm $($PROG) kernel
+	

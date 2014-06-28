@@ -1,12 +1,15 @@
-CFLAGS=-I/home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/libs/commons/commons -I/home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/src/umv/src -I/home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/libs/silverstack/src -I/home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/libs/parser/parser -I/home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/libs/commons/commons/collections
-OBJETOS=/home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/src/umv/src/umv.o /home/joaquin/tp-2014-1c-silverstack/libs/commons/Debug/libcommons.so /home/joaquin/tp-2014-1c-silverstack/libs/silverstack/Debug/libsilverstack.so /home/joaquin/tp-2014-1c-silverstack/libs/parser/Debug/libparser.so
-FUENTES=/home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/src/umv/src/umv.c
+LIBS := -lpthread -pthread -lcommons -lsilverstack -lparser -lncurses
 
-umv: $(OBJETOS)
-	gcc $(OBJETOS) -o umv -lncurses -lpthread
+SILVER_I := -I"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/silverstack/" 
+COMMONS_I := -I"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/commons/"
+PARSER_I := -I"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/parser/"
 
-depend:
-	makedepend $(CFLAGS) $(FUENTES)
+SILVER_L := -L"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/silverstack/Debug"
+COMMONS_L := -L"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/commons/Debug"
+PARSER_L := -L"/home/utnso/Escritorio/tp-2014-1c-silverstack/libs/parser/Debug"
 
+make:
+	gcc -Wall umv.c $(LIBS) $(SILVER_I) $(COMMONS_I) $(PARSER_I) $(SILVER_L) $(COMMONS_L) $(PARSER_L) -o umv    
 clean:
-	rm /home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/src/umv/src/umv.o /home/joaquin/Back-Up-TP/tp-2014-1c-silverstack/src/umv/Debug/umv
+	rm $($PROG) umv
+	
