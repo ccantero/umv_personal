@@ -494,8 +494,8 @@ int asignar_direccion_logica(int pid, int tamanio)
 			{
 				sleep(1);
 				srand(time(NULL));
-				direccion = rand() % (space + 1);
-				if((direccion + tamanio) < space)
+				direccion = rand() % 10000;
+				if((direccion + tamanio) < 10000)
 				{
 					for(j = 0; j < list_size(prog->segmentos); j++)
 					{
