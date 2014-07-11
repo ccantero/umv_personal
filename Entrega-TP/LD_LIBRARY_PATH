@@ -1,0 +1,1 @@
+export LD_LIBRARY_PATH=/home/utnso/Entrega-TP/libs/commons/Debug:/home/utnso/Entrega-TP/libs/parser/Debug:/home/utnso/Entrega-TP/libs/silverstack/Debug
