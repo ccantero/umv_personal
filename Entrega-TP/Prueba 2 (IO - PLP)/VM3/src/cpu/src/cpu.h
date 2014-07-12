@@ -47,6 +47,7 @@ t_msg_envio_bytes msg_envio_bytes;
 t_msg_solicitud_bytes msg_solicitud_bytes;
 int proceso_bloqueado = 0;
 int proceso_finalizo = 0;
+int proceso_imprimir_valores_finales = 1;
 t_log *logger;
 t_config *config;
 t_list *variables;

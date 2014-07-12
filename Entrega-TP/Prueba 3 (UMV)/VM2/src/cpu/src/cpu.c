@@ -89,11 +89,6 @@ int main(int argc, char *argv[])
 		log_error(logger, "Handshake con UMV erroneo.");
 		depuracion(SIGINT);
 	}
-
-
-
-
-
 	t_mensaje msg_aux;
 	int i;
 	int j;
@@ -229,6 +224,7 @@ int main(int argc, char *argv[])
 		if (proceso_finalizo == 1)
 		{
 			// Envio a consola de programa el valor final de las variables
+			proceso_finalizo = 0;
 			silverstack_imprimirTexto("Valor final de variables:\n");
 			for (j = 0; j < list_size(variables); j++)
 			{
@@ -248,6 +244,7 @@ int main(int argc, char *argv[])
 			send(sockKernel, &pcb, sizeof(t_pcb), 0);
 			log_info(logger, "Envie PCB al kernel.");
 			proceso_finalizo = 0;
+			proceso_imprimir_valores_finales = 1;
 		}
 		else
 		{
@@ -388,17 +385,30 @@ t_puntero silverstack_definirVariable(t_nombre_variable var)
 t_puntero silverstack_obtenerPosicionVariable(t_nombre_variable var)
 {
 	// 1) Busco la direccion de la variable en el diccionario de variables y la devuelvo
+	t_mensaje msg_aux;
 	t_puntero ptr = 0;
+	int encontre = 0;
 	int i = 0;
 	for (i = 0; i < list_size(variables); i++)
 	{
 		nueva_var = list_get(variables, i);
 		if (nueva_var->id == var)
 		{
+			encontre = 1;
 			break;
 		}
 	}
-	ptr = nueva_var->dir;
+	if (encontre == 1)
+	{
+		ptr = nueva_var->dir;
+	}
+	else
+	{
+		msg_aux.tipo = SEGMENTATION_FAULT;
+		send(sockKernel, &msg_aux, sizeof(t_mensaje), 0);
+		proceso_finalizo = 1;
+		proceso_imprimir_valores_finales = 0;
+	}
 	return ptr;
 
 	/*
@@ -430,53 +440,7 @@ t_valor_variable silverstack_dereferenciar(t_puntero dir_var)
 {
 	// 1) Se lee el valor de la variable almacenada en dir_var
 	t_valor_variable valor = 0;
-	t_valor_variable valor2 = 0;
-	char buffer_aux[5];
-	int i = 0;
-	int encontre = 0;
-	for (i = 0; i < list_size(variables); i++)
-	{
-		nueva_var = list_get(variables, i);
-		if (nueva_var->dir == (int)dir_var)
-		{
-			encontre = 1;
-			break;
-		}
-	}
-	if (encontre == 1)
-	{
-		valor = nueva_var->valor;
-	}
-	else
-	{
-		msg_solicitud_bytes.base = pcb.stack_segment;
-		msg_solicitud_bytes.offset = dir_var - pcb.stack_segment;
-		msg_solicitud_bytes.tamanio = 5;
-		msg_cambio_proceso_activo.id_programa = pcb.unique_id;
-		mensaje.tipo = SOLICITUDBYTES;
-		send(sockUmv, &mensaje, sizeof(t_mensaje), 0);
-		send(sockUmv, &msg_cambio_proceso_activo, sizeof(t_msg_cambio_proceso_activo), 0);
-		send(sockUmv, &msg_solicitud_bytes, sizeof(t_msg_solicitud_bytes), 0);
-		if (recv(sockUmv, &mensaje, sizeof(t_mensaje), 0) == 0)
-		{
-			log_error(logger, "UMV desconectada.");
-			depuracion(SIGINT);
-		}
-		if (mensaje.tipo == ENVIOBYTES)
-		{
-			if (recv(sockUmv, &buffer_aux, 5, 0) == 0)
-			{
-				log_error(logger, "UMV desconectada.");
-				depuracion(SIGINT);
-			}
-			memcpy(&valor2, &buffer_aux[1], 4);
-		}
-		return valor2;
-	}
-	return valor;
-
-
-	/*
+	t_mensaje msg_aux;
 	char buffer[5];
 	msg_solicitud_bytes.base = pcb.stack_pointer;
 	msg_solicitud_bytes.offset = dir_var - pcb.stack_pointer;
@@ -486,10 +450,28 @@ t_valor_variable silverstack_dereferenciar(t_puntero dir_var)
 	send(sockUmv, &mensaje, sizeof(t_mensaje), 0);
 	send(sockUmv, &msg_cambio_proceso_activo, sizeof(t_msg_cambio_proceso_activo), 0);
 	send(sockUmv, &msg_solicitud_bytes, sizeof(t_msg_solicitud_bytes), 0);
-	recv(sockUmv, &mensaje, sizeof(t_mensaje), 0);
-	recv(sockUmv, &buffer, sizeof(buffer), 0);
-	memcpy(&valor, &buffer[1], 4);
-	*/
+	if (recv(sockUmv, &mensaje, sizeof(t_mensaje), 0) == 0)
+	{
+		log_error(logger, "UMV desconectada.");
+		depuracion(SIGINT);
+	}
+	if (mensaje.tipo == ENVIOBYTES)
+	{
+		if (recv(sockUmv, &buffer, 5, 0) == 0)
+		{
+			log_error(logger, "UMV desconectada.");
+			depuracion(SIGINT);
+		}
+		memcpy(&valor, &buffer[1], 4);
+	}
+	else
+	{
+		msg_aux.tipo = mensaje.tipo;
+		send(sockKernel, &msg_aux, sizeof(t_mensaje), 0);
+		proceso_finalizo = 1;
+		proceso_imprimir_valores_finales = 0;
+	}
+	return valor;
 }
 
 void silverstack_asignar(t_puntero dir_var, t_valor_variable valor)
@@ -537,15 +519,18 @@ void silverstack_asignar(t_puntero dir_var, t_valor_variable valor)
 void silverstack_imprimir(t_valor_variable valor)
 {
 	// 1) Envio al kernel el valor para que lo imprima la correspondiente consola
-	t_mensaje msg;
-	msg.id_proceso = CPU;
-	msg.tipo = IMPRIMIR;
-	msg.datosNumericos = valor;
-	send(sockKernel, &msg, sizeof(t_mensaje), 0);
-	if (recv(sockKernel, &msg, sizeof(t_mensaje), 0) == 0)
+	if (proceso_finalizo != 1 && proceso_imprimir_valores_finales == 1)
 	{
-		log_error(logger, "Kernel desconectado.");
-		depuracion(SIGINT);
+		t_mensaje msg;
+		msg.id_proceso = CPU;
+		msg.tipo = IMPRIMIR;
+		msg.datosNumericos = valor;
+		send(sockKernel, &msg, sizeof(t_mensaje), 0);
+		if (recv(sockKernel, &msg, sizeof(t_mensaje), 0) == 0)
+		{
+			log_error(logger, "Kernel desconectado.");
+			depuracion(SIGINT);
+		}
 	}
 }
 

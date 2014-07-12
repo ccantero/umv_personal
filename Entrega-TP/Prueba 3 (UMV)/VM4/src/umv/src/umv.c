@@ -294,7 +294,10 @@ int atender_solicitud_bytes(int base, int offset, int tam, int sock, char **buff
 		}
 		if (encontre_segmento == 1)
 		{
+			log_info(logger, "Tamanio del segmento encontrado: %d", seg->tamanio);
+			log_info(logger, "offset recibido: %d", offset);
 			if (tam > seg->tamanio ||
+				offset < 0 ||
 				offset > seg->tamanio ||
 				(seg->dirFisica+offset+tam) > (seg->dirFisica+seg->tamanio))
 			{
