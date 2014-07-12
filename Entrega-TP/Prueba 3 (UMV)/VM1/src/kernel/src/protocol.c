@@ -1201,6 +1201,22 @@ int umv_send_segment(int pid, char* buffer, int tamanio)
 	if(mensaje.tipo == SEGMENTATION_FAULT)
 	{
 		process_set_status(pid,PROCESS_ERROR);
+		t_process* process;
+
+		pthread_mutex_lock(&mutex_process_list);
+		int i;
+
+		for(i=0; i < list_size(list_process);i++)
+		{
+			process = list_get(list_process,i);
+			if(process->pid == pid)
+			{
+				process->error_status = LOW_MEMORY;
+				process->status = PROCESS_ERROR;
+				break;
+			}
+		}
+		pthread_mutex_unlock(&mutex_process_list);
 		log_error(logger,"ENVIOBYTES Fallo --> SEGMENTATION_FAULT");
 		free(buffer_msg);
 		return -1;
@@ -1809,7 +1825,7 @@ int escuchar_cpu(int sock_cpu)
 	if((buffer = (char*) malloc (sizeof(char) * MAXDATASIZE)) == NULL)
 	{
 		log_error(logger,"Error al reservar memoria para el buffer en escuchar_cpu");
-		return -1;
+		return -2;
 	}
 
 	memset(buffer,'\0',MAXDATASIZE);
@@ -1857,6 +1873,7 @@ void process_segmentation_fault(int sock_cpu)
 
 	log_debug(logger,"process_segmentation_fault(%d)",sock_cpu);
 
+	pthread_mutex_lock(&mutex_process_list);
 	for(i=0;i< list_size(list_process);i++)
 	{
 		process = list_get(list_process,i);
@@ -1871,9 +1888,11 @@ void process_segmentation_fault(int sock_cpu)
 	{
 		process->status = PROCESS_ERROR;
 		process->error_status = SEGMENTATION_FAULT;
+		log_debug(logger,"Proceso %d set to PROCESS_ERROR status");
+		pthread_mutex_unlock(&mutex_process_list);
 		return;
 	}
-
+	pthread_mutex_unlock(&mutex_process_list);
 	log_error(logger,"No se encontro Proceso con PID = %d en process_segmentation_fault()", process->pid);
 	return;
 }
@@ -1998,8 +2017,11 @@ void imprimir(int sock_cpu,int valor)
 	{
 		sock_prog = process->program_socket; //Obtengo el socket del programa
 
+		log_debug(logger,"process_found in imprimir(%d,%d)",sock_cpu, valor);
 		if(process->status != PROCESS_ERROR)
 		{
+			log_debug(logger,"process->status != PROCESS_ERROR in imprimir(%d,%d)",sock_cpu, valor);
+
 			if((numbytes=write(sock_prog,&mensaje,size_msg))<=0)
 			{
 				log_error(logger, "No se pudo enviar mensaje Imprimir a Programa %d", process->pid);
@@ -2008,14 +2030,17 @@ void imprimir(int sock_cpu,int valor)
 				//close(sock_prog); No cierro el socket del programa porque eso lo hace el select
 			}
 		}
+		else
+		{
+			log_debug(logger,"process->status == PROCESS_ERROR in imprimir(%d,%d)",sock_cpu, valor);
+		}
 	}
 	else
 	{
-		log_error(logger,"No se encontro el proceso asociado al sock cpu = %d",sock_cpu);
-		pthread_mutex_unlock(&mutex_process_list);
-		return;
+		log_debug(logger,"No se encontro proceso asociado al sock_cpu %d", sock_cpu);
 	}
 
+	log_debug(logger,"Se envia respuesta a CPU en imprimir(%d,%d)",sock_cpu, valor);
 	if((numbytes=write(sock_cpu,&mensaje,size_msg))<=0)
 	{
 		log_error(logger, "CPU no conectada");
@@ -2119,6 +2144,10 @@ void imprimirTexto(int sock_cpu,int valor)
 			}
 		}
 	}
+	else
+	{
+		log_debug(logger,"No se encontro proceso asociado al cpu = %d", sock_cpu);
+	}
 
 	mensaje.id_proceso = KERNEL;
 	mensaje.tipo = IMPRIMIRTEXTO;
@@ -2155,6 +2184,7 @@ t_nodo_cpu* cpu_create(int socket)
 {
 	t_nodo_cpu* new_cpu = (t_nodo_cpu*) malloc(sizeof(t_nodo_cpu));
 	new_cpu->socket = socket;
+	new_cpu->contador = 0;
 	if(cantidad_cpu <= multiprogramacion)
 	{
 		new_cpu->status = CPU_AVAILABLE;
@@ -2221,6 +2251,9 @@ void cpu_set_status(int socket_cpu, unsigned char status)
 		if(flag_found == 0 && cpu->socket == socket_cpu)
 		{
 			cpu->status = nuevo_status;
+			if(nuevo_status == CPU_WORKING)
+				cpu->contador = cpu->contador + 1;
+
 			flag_found = 1;
 			break;
 		}
@@ -3217,6 +3250,7 @@ void program_exit(int pid)
 			case ERROR_WRONG_VARCOM: strcpy(mensaje.mensaje,"VARCOM NO EXIST"); break;
 			case SEGMENTATION_FAULT: strcpy(mensaje.mensaje,"SEGMENT FAULT"); break;
 			case ERROR_WRONG_IO: strcpy(mensaje.mensaje,"IO NOT FOUND"); break;
+			case LOW_MEMORY: strcpy(mensaje.mensaje,"MEMORY OVERLOAD"); break;
 			default: strcpy(mensaje.mensaje,"NOT KNOWN ERROR");
 		}
 	}
@@ -3445,6 +3479,7 @@ t_nodo_cpu* cpu_get_next_available(int pid)
 	int sock_cpu = -1;
 	int i;
 	int flag_cpu_found = 0;
+	int cantidad_procesos = 0;
 
 	process = process_get(pid);
 
@@ -3461,12 +3496,17 @@ t_nodo_cpu* cpu_get_next_available(int pid)
 		cpu = list_get(list_cpu,i);
 		if(cpu->status == CPU_AVAILABLE)
 		{
-			cpu_available = cpu;
-			flag_cpu_found = 1;
+			if(cantidad_procesos == 0 || cantidad_procesos < cpu->contador)
+			{
+				cantidad_procesos = cpu->contador;
+				cpu_available = cpu;
+				flag_cpu_found = 1;
+			}
+
+			if(cpu->socket == sock_cpu)
+				break;
 		}
 
-		if(cpu->socket == sock_cpu)
-			break;
 	}
 
 	if(flag_cpu_found == 1)

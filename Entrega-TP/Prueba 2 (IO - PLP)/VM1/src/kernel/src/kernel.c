@@ -16,7 +16,6 @@
 int main(int argc, char *argv[])
 {
 	int i,fdmax; /* for aux */
-	//TODO: Si no existe variable compartida no morir
 	int sock_program = 0, sock_cpu = 0;
 	int new_socket;
 	fd_set read_fds;
@@ -229,8 +228,10 @@ int main(int argc, char *argv[])
 
 				if(is_Connected_CPU(i) != 0)
 				{
+					log_debug(logger,"Se detecto actividad en un CPU existente");
 					if(escuchar_cpu(i) == -1)
 					{
+						log_debug(logger,"Fallo el read en socket cpu. Se procede a remover CPU");
 						close(i);
 						FD_CLR(i, &master);
 						cpu_remove(i);
