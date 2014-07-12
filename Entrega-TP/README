@@ -1,0 +1,3 @@
+Para correr las librerias se debe ejecutar:
+
+	. ./export_libraries.sh

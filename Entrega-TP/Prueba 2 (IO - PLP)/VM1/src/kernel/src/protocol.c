@@ -1453,7 +1453,7 @@ void planificador_sjn(void)
 
 		if(cantidad_procesos_new > 0)
 		{
-			if(cantidad_procesos_sistema <= multiprogramacion)
+			if(cantidad_procesos_sistema < multiprogramacion)
 			{
 				sort_plp();
 
