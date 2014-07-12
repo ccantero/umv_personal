@@ -410,7 +410,6 @@ t_puntero silverstack_obtenerPosicionVariable(t_nombre_variable var)
 		proceso_imprimir_valores_finales = 0;
 	}
 	return ptr;
-
 	/*
 		while(no_encontre)
 		{
@@ -442,8 +441,8 @@ t_valor_variable silverstack_dereferenciar(t_puntero dir_var)
 	t_valor_variable valor = 0;
 	t_mensaje msg_aux;
 	char buffer[5];
-	msg_solicitud_bytes.base = pcb.stack_pointer;
-	msg_solicitud_bytes.offset = dir_var - pcb.stack_pointer;
+	msg_solicitud_bytes.base = pcb.stack_segment;
+	msg_solicitud_bytes.offset = dir_var - pcb.stack_segment;
 	msg_solicitud_bytes.tamanio = 5;
 	msg_cambio_proceso_activo.id_programa = pcb.unique_id;
 	mensaje.tipo = SOLICITUDBYTES;
